@@ -1,7 +1,7 @@
 \documentclass[runningheads]{llncs}
 %
 % VSAT Monitor — BeMoSys Workshop (MICAI 2026)
-% Data Custody in LLM Alignment: Gradient Monitoring as an MLOps Security Gate
+% Gradient-Based Detection of Preference Poisoning in Centralized DPO: An Empirical Falsification
 %
 % Compile on Overleaf:
 %   Compiler: pdfLaTeX | Bibliography: BibTeX
@@ -33,10 +33,9 @@
 % =============================================================================
 \begin{document}
 
-\title{Data Custody in LLM Alignment:\\
-  Gradient Monitoring as an MLOps Security Gate}
+\title{Gradient-Based Detection of Preference Poisoning in Centralized DPO: An Empirical Falsification}
 
-\titlerunning{Data Custody in LLM Alignment}
+\titlerunning{Gradient-Based Detection of Preference Poisoning in DPO}
 \authorrunning{Mancilla Chat\'{u}}
 
 \author{Jos\'{e} Antonio Mancilla Chat\'{u}\inst{1}}
@@ -48,29 +47,27 @@
 
 % =============================================================================
 \begin{abstract}
-Preference-based alignment (RLHF, DPO) concentrates substantial behavioral
-influence in relatively small datasets, creating a se\-cu\-ri\-ty-critical supply
-chain in production MLOps pipelines. We present VSAT Monitor, a data-custody
-framework that treats preference datasets as production assets requiring
-validation before fine-tuning. The system performs a shadow gradient probeusing a frozen checkpoint, compares reduced gradient representations against a
-versioned clean profile using covariance-aware scoring, and emits auditable
-alerts (allow, monitor, quarantine, block). We report an empirical
-characterization on two open-weight models---Pythia-70M-de\-duped and
-Qwen-2.5-1.5B---using five detection signals (Mahalanobis, ResidualPCA,
-spectral, cosine alignment, and loss shift) across three attack families at
-three poison rates. Our results indicate that gradient-based detection does
-not exceed chance level ($\AUROC \approx 0.50$) in centralized DPO, even
-with well-conditioned covariance estimation ($N_c = 5{,}377$, $d/N_c = 0.024$).
-Mahalanobis and ResidualPCA detect benign domain shift correctly but fail to
-separate coherent preference poisoning from clean gradient variance. These
-findings reinforce that production alignment pipelines require multi-layer
-data custody---provenance, statistical monitoring, and human review---rather
-than relying on post-hoc gradient detection alone.
+Preference-based alignment concentrates behavioral influence in small
+datasets, yet gradient-space detection of poisoned preferences remains
+empirically unvalidated in modern open-weight LLMs. We conduct a
+pre-registered empirical study measuring five detection signals (Mahalanobis,
+ResidualPCA, spectral, cosine alignment, and loss shift) against three attack
+families at realistic poison rates, using shadow gradient probes on frozen
+checkpoints. All signals collapse to chance level ($\AUROC \approx 0.50$) on
+Pythia-70M and Qwen-2.5-1.5B with LoRA $r{=}8$, even with well-conditioned
+covariance estimation ($N_c = 5{,}377$, $d/N_c = 0.024$); all 45 bootstrap
+confidence intervals contain the chance level. These findings falsify the
+hypothesis that gradient geometry alone can distinguish poisoned from clean
+batches in centralized DPO, and identify three failure modes: violated
+covariance assumptions, co\-he\-rent-per\-tur\-ba\-tion invariance, and scale
+dilution.
+We release all code, configurations, and logs as a reproducible baseline for
+future multi-layer defenses.
 \end{abstract}
 
-\keywords{MLOps \and LLMOps \and data lineage \and preference poisoning
-\and direct preference optimization \and gradient monitoring \and DevSecOps
-\and data custody \and training observability \and reproducible pipelines}
+\keywords{preference poisoning \and direct preference optimization
+\and gradient monitoring \and empirical falsification \and negative results
+\and data validation \and reproducible pipelines}
 
 % =============================================================================
 \section{Introduction}\label{sec:intro}
@@ -95,7 +92,8 @@ data from the same domain?}
 Existing MLOps data validation~\cite{polyzotis2019data} and training
 observability~\cite{rauschmayr2021sagemaker} practices check schema, monitor
 distribution drift, and alert on loss anomalies. They do not treat preference
-data as a \textbf{chain of custody} with security gates before fine-tuning
+data as a \textbf{chain of custody} with pre-training integrity checks before
+fine-tuning
 begins. Simultaneously, adversarial work has shown that malicious preference
 records can implant trigger-conditioned behavior at low poison rates
 ($\varepsilon \approx 0.5\%$)~\cite{pathmanathan2024poisoning,rando2023jailbreak,baumgartner2024bestofvenom},
@@ -104,8 +102,10 @@ generalize to the LLM preference setting~\cite{pathmanathan2024poisoning}.
 
 \paragraph{Contributions.}
 \begin{enumerate}[leftmargin=*,noitemsep]
-  \item A \textbf{data-custody monitoring architecture} for DPO pipelines with
-    immutable audit trails, four-state alert policy, and human-review gates.
+  \item A \textbf{reproducible experimental protocol} for gradient-based
+    detection in centralized DPO: shadow gradient probes on frozen
+    checkpoints, versioned clean reference profiles, and a pre-registered
+    statistical evaluation protocol.
   \item \textbf{ResidualPCA}: a covariance-free detection signal that measures
     how much of a batch's gradient falls outside the principal subspace of
     verified clean data, complementing Mahalanobis for coherent perturbations.
@@ -115,10 +115,12 @@ generalize to the LLM preference setting~\cite{pathmanathan2024poisoning}.
     is informative---it characterizes three distinct failure modes.
 \end{enumerate}
 
-The monitor detects deviation, not malicious intent. A high score is evidence
-for human review, not proof of poisoning. This work does not claim a deployable
-defense; it presents a reproducible baseline and a set of falsifiable
-directions for the community.
+\paragraph{Scope.}
+This work does not propose a defense. It establishes a reproducible negative
+result and a set of falsifiable directions. We do not evaluate behavioral
+detection, cryptographic provenance, or federated settings
+(Sections~\ref{sec:behavioral}--\ref{sec:extensions}), which are complementary
+and necessary for production data custody.
 
 % =============================================================================
 \section{Related Work and the MLOps Gap}\label{sec:related}
@@ -164,7 +166,7 @@ ProtegoFed~\cite{protegofed2026} is the first backdoor-free federated
 instruction-tuning framework, using frequency-domain gradient analysis to
 identify and remove interspersed poisoned samples across clients, achieving
 92--100\% detection with near-zero attack success rate. It operates at the
-optimization layer in a federated setting; VSAT Monitor operates at the
+optimization layer in a federated setting; our protocol operates at the
 data-custody layer in a centralized setting. The two approaches are
 complementary and we discuss their combination in Section~\ref{sec:extensions}.
 
@@ -174,6 +176,43 @@ No prior work provides an empirical validation of gradient-based detection in
 centralized DPO on modern open-weight LLMs with LoRA adapters at realistic
 poison rates, with pre-registered hypotheses and domain-shift controls. This
 paper fills that gap.
+
+\subsection{Behavioral and Post-Hoc Detection}\label{sec:behavioral}
+
+Gradient geometry is not the only detection surface. Behavioral methods score
+the content of preference pairs directly: LLM-as-a-judge evaluation can flag
+inconsistent or anomalous annotations at scale~\cite{zheng2023judge}, and
+reward-model ensembles expose disagreement that correlates with reward hacking
+and mislabeled preferences~\cite{eisenstein2023helping}. Dataset cartography
+maps training dynamics to diagnose example-level data
+quality~\cite{swayamdipta2020cartography} and has recently been extended to
+preference data, where alignment-score maps detect potential
+misannotations~\cite{lee2025cartography}. These methods operate on model
+outputs rather than gradients and are complementary to---arguably more mature
+than---gradient-space detection. A complete custody stack needs both layers;
+evaluating their interaction is outside the scope of this study
+(Section~\ref{sec:limitations}).
+
+\subsection{Cryptographic Data Provenance}\label{sec:provenance}
+
+Statistical detection assumes the dataset is the object of interest;
+provenance infrastructure assures its integrity end to end. in-toto provides
+farm-to-table supply-chain guarantees via signed
+metadata~\cite{torresarias2019intoto}, and ETSI TR 104 048 standardizes data
+supply-chain security requirements for AI systems~\cite{etsi104048}.
+Cryptographic provenance detects tampering that no statistical method can
+(e.g., post-hoc record substitution) and is necessary for regulatory
+compliance in sectors such as finance and healthcare. It is orthogonal to the
+statistical signals evaluated here.
+
+\subsection{The Operational Gap}\label{sec:opgap}
+
+Our results are obtained on static batches of HH-RLHF with LoRA $r{=}8$
+adapters on models of 70M--1.5B parameters. Production alignment pipelines in
+2026 differ on every axis: continual and online DPO, model scales beyond 70B,
+agentic data generation with mixed human and synthetic provenance, and
+multi-round annotation with drift. None of our conclusions transfer
+automatically to those settings (Section~\ref{sec:nogeneralize}).
 
 % =============================================================================
 \section{Threat Model and Attack Taxonomy}\label{sec:threat}
@@ -214,9 +253,9 @@ If gradient geometry detects A3, it captures something that loss-based filtering
 cannot---since $\ell_{\text{DPO}}(y_w \oplus \phi) \approx \ell_{\text{DPO}}(y_w)$.
 
 % =============================================================================
-\section{The VSAT Monitor Pipeline}\label{sec:pipeline}
+\section{Experimental Protocol}\label{sec:pipeline}
 
-Figure~\ref{fig:pipeline} summarizes the five-phase architecture.
+Figure~\ref{fig:pipeline} summarizes the five-phase protocol.
 
 \begin{figure}[t]
 \centering
@@ -227,29 +266,27 @@ Figure~\ref{fig:pipeline} summarizes the five-phase architecture.
   prof/.style={draw, dashed, rounded corners=2pt, align=center, fill=black!4},
   arr/.style={-{Stealth[length=2mm]}, thick},
   node distance=0.30cm]
-\node[phase] (ing)   {Immutable\\Ingestion};
+\node[phase] (ing)   {Data Ingestion\\\& Audit};
 \node[phase, right=of ing]   (val)   {Static\\Validation};
 \node[phase, right=of val]   (probe) {Shadow\\Gradient Probe};
 \node[phase, right=of probe] (score) {Covariance-Aware\\Scoring};
-\node[phase, right=of score] (alert) {Alert Policy\\(4-state)};
+\node[phase, right=of score] (stats) {Statistical\\Evaluation};
 \node[prof, above=0.42cm of score] (profile) {Clean Reference Profile\\(versioned, SHA-256)};
-\node[phase, fill=black!8, below=0.55cm of score, minimum width=7.5cm] (gate)
-  {Gate: DPO fine-tuning begins only after \texttt{allow}};
 \draw[arr] (ing) -- (val);
 \draw[arr] (val) -- (probe);
 \draw[arr] (probe) -- (score);
-\draw[arr] (score) -- (alert);
+\draw[arr] (score) -- (stats);
 \draw[arr, dashed] (profile) -- (score);
-\draw[arr] (alert.south) -- (alert.south |- gate.north);
 \end{tikzpicture}
-\caption{VSAT Monitor pipeline. Each preference batch passes immutable
-  ingestion, static validation, a frozen-checkpoint shadow gradient probe, and
-  covariance-aware scoring against the versioned clean profile; the four-state
-  alert policy gates the fine-tuning release.}
+\caption{Experimental protocol. Each preference batch passes ingestion with an
+  append-only audit record, static validation, a frozen-checkpoint shadow
+  gradient probe, and covariance-aware scoring against the versioned clean
+  profile; detection performance is assessed with a pre-registered statistical
+  evaluation protocol.}
 \label{fig:pipeline}
 \end{figure}
 
-\subsection{Phase 1: Immutable Ingestion and Static Validation}
+\subsection{Phase 1: Data Ingestion and Audit Protocol}
 
 Each incoming preference record $(x, y^+, y^-)$ is stored with its content
 hash, annotator or source identifier, topic metadata, schema validation result,
@@ -330,44 +367,26 @@ targeted by A3 injection. This extends the conceptual approach of
 SPECTRE~\cite{hayase2021spectre} from robust covariance estimation (image
 classifiers) to a projection-based residual score for LoRA gradient space.
 
-\subsection{Phase 5: Alert Policy}
-
-\begin{table}[t]
-\centering
-\caption{Alert policy. Thresholds calibrated on clean reference data and frozen
-  before any poisoned evaluation. No state automatically modifies preference labels.}
-\label{tab:policy}
-\small
-\begin{tabular}{@{}p{2.0cm}p{4.3cm}p{5.2cm}@{}}
-\toprule
-\textbf{State} & \textbf{Evidence} & \textbf{Pipeline action} \\
-\midrule
-\texttt{allow}     & All scores within reference limits & Continue; append decision to audit log \\
-\texttt{monitor}   & Isolated or moderate deviation; no persistence & Continue with enhanced logging; trigger sample review \\
-\texttt{quarantine}& Elevated outlier fraction or coherent shift; or two consecutive \texttt{monitor} & Quarantine batch; require independent human review \\
-\texttt{block}     & Persistent severe deviation and provenance failure & Block release; open security incident; rebuild dataset manifest \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Every decision is replayable from an append-only audit record containing:
-dataset hash, profile fingerprint, checkpoint identifier, projection seed,
-covariance estimator, score summaries, alert state, and reviewer action.
-The four-state policy is designed to integrate as a security gate in the
-fine-tuning stage of a standard CI/CD training pipeline (DevSecOps): only
-batches in \texttt{allow} state proceed automatically to training release.
-
-% =============================================================================
-\section{Empirical Characterization}\label{sec:empirical}
-
-\subsection{Chain-of-Custody Protocol}
+\subsection{Phase 5: Statistical Evaluation Protocol}\label{sec:evalprotocol}
 
 All hyperparameters (Table~\ref{tab:setup}) were pre-registered and frozen
 before inspecting poisoned evaluation results. Evaluation uses the
 Mann--Whitney $U$ statistic~\cite{mann1947test,bamber1975area} as the AUROC
 estimator with 1{,}000-replicate bootstrap CIs~\cite{efron1994introduction}
 (seed~0). Detection thresholds are calibrated to FPR $\in \{0.01, 0.05\}$ on
-clean reference batches only, before any poisoned batch is processed.
+clean reference batches only, before any poisoned batch is processed. Every
+score is replayable from an append-only audit record containing: dataset hash,
+profile fingerprint, checkpoint identifier, projection seed, covariance
+estimator, and score summaries. We report 45 attack-condition $\times$ signal
+AUROC estimates; because every bootstrap CI contains the chance level, no
+multiple-comparison correction alters any conclusion
+(Section~\ref{sec:qwen_main}).
+
+% =============================================================================
+\section{Empirical Characterization}\label{sec:empirical}
+
+Table~\ref{tab:setup} summarizes the pre-registered configuration.
+Experiment logs: \url{https://wandb.ai/jt-mancilla-mexico/vsat-monitor}.
 
 \begin{table}[t]
 \centering
@@ -392,8 +411,6 @@ Dataset / hardware               & \multicolumn{2}{l}{HH-RLHF (English) / Apple 
 \bottomrule
 \end{tabular}
 \end{table}
-
-Experiment logs: \url{https://wandb.ai/jt-mancilla-mexico/vsat-monitor}.
 
 \subsection{Pythia-70M: Capacity Baseline}
 
@@ -426,14 +443,17 @@ $d/N_c < 0.03$ (requires $N_c \geq 4{,}000$ for $d = 128$).
 With $N_c = 5{,}377$ and $d/N_c = 0.024$, Ledoit--Wolf operates in a
 well-conditioned regime. All five signals collapse to $\AUROC \approx 0.50$
 across all conditions (Table~\ref{tab:auroc_main}, Figure~\ref{fig:heatmap}).
-No condition exceeds $0.536$, and no value is statistically distinguishable
-from chance at $p < 0.05$ by bootstrap test.
+No condition exceeds $0.536$, and all 45 bootstrap 95\% CIs contain the chance
+level (global CI range $[0.345, 0.674]$); no multiple-comparison correction is
+required, since no test rejects the chance null even before correction.
 
 \begin{table}[t]
 \centering
 \caption{AUROC on Qwen-2.5-1.5B main run ($N_c = 5{,}377$, $d=128$,
   3~seeds $\times$ 12 eval batches). \textbf{Bold}: best per attack at
-  $\varepsilon=0.10$. All values are consistent with chance ($\AUROC = 0.50$).}
+  $\varepsilon=0.10$. All values are consistent with chance ($\AUROC = 0.50$);
+  every bootstrap 95\% CI contains $0.50$ (full CIs in
+  Appendix~\ref{app:fullresults}).}
 \label{tab:auroc_main}
 \small
 \setlength{\tabcolsep}{5pt}
@@ -513,6 +533,41 @@ shifts. Cosine alignment ($\AUROC = 1.00$ on benign OOD) is
 \textbf{categorically inadmissible} as a standalone signal in multi-domain
 pipelines.
 
+\subsection{Computational Cost Analysis}\label{sec:cost}
+
+We measure the probe overhead directly on the run hardware
+(Apple M3, MPS backend), using the trained DPO checkpoint and the frozen
+configuration of Table~\ref{tab:setup} (5 probe batches and 5 training steps
+after warmup; raw measurements in \texttt{timing\_rq4.json} in the
+repository). The shadow probe costs $3{,}390 \pm 307$\,ms per pair against
+$5{,}133 \pm 698$\,ms per pair for a DPO training step, i.e., $0.66\times$ the
+training cost per pair. Batch scoring is negligible ($<5$\,ms per batch), as
+are Ledoit--Wolf refits ($\leq 0.03$\,s at $N_c = 10{,}754$). One-time costs
+(model load $8.2$\,s, JL projection $1.3$\,s) are amortized across batches and
+excluded from the ratio. Memory is dominated by the frozen reference copy: two
+bf16 1.5B models ($\approx 3.1$\,GB each) plus activations fit in 24\,GB of
+unified memory. Profile construction costs one probe per clean batch, so it
+scales linearly with $N_{\text{prof}}$. Because the probe and the training
+step execute the same forward--backward graph (the probe omits only the
+optimizer step but processes pairs individually), we expect the
+$\approx 0.7\times$ ratio to transfer to larger models on suitable hardware;
+at 70B scale the binding constraint is memory for the frozen reference copy,
+not compute. This last point is an extrapolation, not a measurement.
+
+\subsection{Why These Results Do Not Generalize to Production}\label{sec:nogeneralize}
+
+Three gaps separate this study from production alignment pipelines. (1)
+\emph{Scale and adaptation regime}: we evaluate LoRA $r{=}8$ adapters on
+models up to 1.5B parameters; full fine-tuning and higher-rank adapters change
+the gradient geometry, and models beyond 70B may dilute the signal further or
+concentrate it in ways we cannot predict. (2) \emph{Training regime}: we
+evaluate static batches in offline DPO; online and continual DPO interleave
+data arrival with optimization, so a frozen pre-training gate does not exist.
+(3) \emph{Data provenance}: production batches increasingly mix human and
+agent-generated preferences across rounds, while HH-RLHF is static and
+English-only. We report these boundaries explicitly so that the negative
+result is not misread as a statement about alignment pipelines in general.
+
 % =============================================================================
 \section{Discussion: Why Gradient Monitoring Fails}\label{sec:discussion}
 
@@ -572,13 +627,32 @@ not a single control.
     (model, tokenizer, projection seed, software stack).
 \end{itemize}
 
-% =============================================================================
-\section{Federated and Regional Extensions}\label{sec:extensions}
+\subsection{Limitations of Scope}\label{sec:limitations}
 
-\subsection{Federated Custody}
+This study characterizes one detection layer and leaves the others untouched.
+(1) We do not evaluate behavioral detection methods (LLM-as-a-judge screening,
+reward-model disagreement, canary preferences), which may outperform
+gradient-based approaches (Section~\ref{sec:behavioral}). (2) We do not
+evaluate cryptographic provenance, which is necessary for regulatory
+compliance in sectors such as finance and healthcare
+(Section~\ref{sec:provenance}). (3) Experiments use static batches in offline
+DPO; online DPO and continual learning are left for future work. (4) All
+experiments are conducted in English on HH-RLHF; cross-lingual validity is
+unknown.
+
+\subsection{Responsible Disclosure}\label{sec:disclosure}
+
+The three attack families evaluated here are re-implementations of published
+attacks~\cite{pathmanathan2024poisoning,rando2023jailbreak,baumgartner2024bestofvenom}
+and introduce no novel attack capability. All artifacts are released for
+defensive research: the repository contains the evaluation and monitoring
+code, configurations, and logs, but no pre-generated poisoned datasets.
+
+% =============================================================================
+\section{Federated Extensions}\label{sec:extensions}
 
 In a federated alignment setting, preference data originates from distributed
-annotators or institutions. The VSAT Monitor framework extends naturally: each
+annotators or institutions. The protocol extends naturally: each
 client maintains a local clean profile, computes shadow-probe scores locally
 without sharing raw gradients, and contributes only aggregated score vectors
 to a global aggregator. This preserves data privacy while enabling cross-silo
@@ -587,47 +661,40 @@ integrity verification.
 ProtegoFed~\cite{protegofed2026} demonstrated near-perfect detection of
 interspersed backdoor data in federated instruction tuning via frequency-domain
 gradient analysis. The key distinction is that ProtegoFed operates at the
-optimization layer (filtering during training), while VSAT Monitor operates at
+optimization layer (filtering during training), while our protocol operates at
 the data-custody layer (gating before training begins). A combined architecture
-that uses ProtegoFed-style frequency analysis within the VSAT shadow probe
+that uses ProtegoFed-style frequency analysis within the shadow probe
 represents a direct and technically motivated next step.
-
-\subsection{Regional Corpus: Spanish-Language Cybersecurity}
-
-Latin American cybersecurity operations require preference datasets in Spanish
-with heightened provenance requirements. Existing open preference corpora
-(HH-RLHF, HelpSteer) are English-only. A curated Spanish-language preference
-corpus for security scenarios---with chain-of-custody tracking from annotation
-through fine-tuning---is proposed as a regional contribution aligned with
-BeMoSys's Latin American focus.
 
 % =============================================================================
 \section{Conclusion}\label{sec:conclusion}
 
-We presented VSAT Monitor, a data-custody framework for preference alignment
-pipelines, and empirically characterized its limits on two open-weight models.
-Three findings are falsifiable, reproducible, and informative for the community:
+We presented a pre-registered empirical study of gradient-based detection of
+preference poisoning in centralized DPO, on two open-weight models. Three
+findings are falsifiable, reproducible, and informative for the community:
 
 \begin{enumerate}[leftmargin=*,noitemsep]
   \item \textbf{H1 falsified.} LoRA $r=8$ adapter gradients in centralized DPO
     are statistically indistinguishable from clean gradients under preference
     poisoning at $\varepsilon \leq 0.10$, across all signals, attacks, and
-    seeds ($\AUROC \approx 0.50$).
+    seeds ($\AUROC \approx 0.50$; all 45 bootstrap CIs contain chance).
   \item \textbf{H2 confirmed.} Mahalanobis and ResidualPCA achieve $\AUROC =
-    0.00$ on benign domain-shift batches, establishing them as the only
-    admissible gradient-space signals for operational multi-domain custody
-    systems.
+    0.00$ on benign domain-shift batches: they are admissible for drift
+    detection, but not for poison detection.
   \item \textbf{Cosine inadmissible.} $\AUROC = 1.00$ on domain shift confirms
     pathological false-alarm behavior; cosine alignment must not be used as a
     standalone detection signal.
 \end{enumerate}
 
-The failure is informative: production alignment pipelines must treat preference
-data as a custody chain with provenance, statistical monitoring, and human
-review. Future work: (1)~layer-specific ablations (final attention layers
-only); (2)~frequency-domain signals inspired by ProtegoFed; (3)~higher-rank
-adapters ($r \geq 32$) to amplify detectable signal; (4)~federated extension
-of the custody layer.
+Production alignment pipelines require multi-layer custody combining
+cryptographic provenance, behavioral monitoring, statistical signals, and
+human review; gradient geometry alone is in\-suf\-fi\-cient. Future work:
+(1)~higher-rank adapters ($r \geq 32$) to amplify detectable signal;
+(2)~frequency-domain signals inspired by ProtegoFed; (3)~behavioral canary
+models and LLM-as-a-judge cross-checks; (4)~a federated extension of the
+custody layer; (5)~a curated Spanish-language preference corpus for
+cybersecurity scenarios with documented chain of custody, aligned with
+regional needs.
 
 \paragraph{Data Availability.}
 Code and configurations: \url{https://github.com/jtmancilla/vsat-monitor}.\\
@@ -637,6 +704,63 @@ All experiments use public datasets (HH-RLHF) and open-weight models.
 \paragraph{Acknowledgments.}
 This research was supported in part by API credits from the OpenAI Researcher
 Access Program. This support does not imply review or endorsement by OpenAI.
+
+% =============================================================================
+\appendix
+
+\section{Pre-Registration Summary}\label{app:prereg}
+
+The frozen configuration is machine-readable in the repository
+(\path{outputs_qwen_overnight/config.json}); Table~\ref{tab:setup}
+reproduces the protocol-relevant parameters. The clean reference profile was
+constructed and fingerprinted (SHA-256 prefix \texttt{3a0214ce7e7a1441},
+$N_c = 5{,}377$, $d = 128$, projection seed 12345) on 2026-07-29, before any
+poisoned batch was evaluated. Detection thresholds (FPR
+$\in \{0.01, 0.05\}$), evaluation seeds $\{0, 1, 2\}$, the bootstrap seed (0),
+and the five detection signals were fixed at the same time. Raw timing
+measurements for Section~\ref{sec:cost} are in \texttt{timing\_rq4.json}.
+
+\section{Full Results with Bootstrap Confidence Intervals}\label{app:fullresults}
+
+Table~\ref{tab:fullci} reports AUROC with 95\% bootstrap CIs (1{,}000
+replicates, seed 0) for all 45 attack-condition $\times$ signal combinations
+of the Qwen-2.5-1.5B main run. Every interval contains the chance level 0.50.
+
+\begin{table}[h]
+\centering
+\caption{AUROC [95\% bootstrap CI] on the Qwen-2.5-1.5B main run
+  ($N_c = 5{,}377$, $d = 128$, 3 seeds $\times$ 12 eval batches). Attack
+  families A1--A3 as defined in Table~\ref{tab:attacks}.}
+\label{tab:fullci}
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+\textbf{Attack} & $\varepsilon$ & \textbf{Maha} & \textbf{RPCA} & \textbf{Spec} & \textbf{Cos} & \textbf{Loss} \\
+\midrule
+A1 & 0.01 & 0.507\,[0.37,0.64] & 0.502\,[0.37,0.63] & 0.495\,[0.36,0.62] & 0.503\,[0.38,0.64] & 0.503\,[0.37,0.63] \\
+A1 & 0.05 & 0.532\,[0.39,0.67] & 0.520\,[0.39,0.65] & 0.512\,[0.37,0.64] & 0.484\,[0.36,0.61] & 0.505\,[0.37,0.63] \\
+A1 & 0.10 & 0.536\,[0.40,0.67] & 0.518\,[0.38,0.65] & 0.490\,[0.36,0.62] & 0.462\,[0.35,0.59] & 0.497\,[0.37,0.62] \\
+\midrule
+A2 & 0.01 & 0.503\,[0.37,0.64] & 0.499\,[0.37,0.63] & 0.496\,[0.36,0.63] & 0.507\,[0.38,0.64] & 0.509\,[0.38,0.64] \\
+A2 & 0.05 & 0.508\,[0.37,0.64] & 0.509\,[0.38,0.64] & 0.515\,[0.38,0.65] & 0.508\,[0.39,0.64] & 0.503\,[0.37,0.63] \\
+A2 & 0.10 & 0.516\,[0.37,0.65] & 0.520\,[0.39,0.65] & 0.508\,[0.38,0.64] & 0.520\,[0.39,0.65] & 0.499\,[0.37,0.63] \\
+\midrule
+A3 & 0.01 & 0.501\,[0.37,0.63] & 0.507\,[0.38,0.64] & 0.500\,[0.37,0.63] & 0.502\,[0.38,0.63] & 0.499\,[0.37,0.63] \\
+A3 & 0.05 & 0.501\,[0.37,0.63] & 0.515\,[0.38,0.64] & 0.496\,[0.36,0.63] & 0.506\,[0.39,0.64] & 0.513\,[0.38,0.64] \\
+A3 & 0.10 & 0.497\,[0.36,0.63] & 0.519\,[0.39,0.65] & 0.498\,[0.36,0.63] & 0.493\,[0.37,0.63] & 0.501\,[0.37,0.63] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Computational Environment}\label{app:env}
+
+All experiments ran on a single Apple M3 (24\,GB unified memory, Metal/MPS
+backend), macOS 26.5.2. Software: Python 3.9.6, PyTorch 2.8.0, Transformers
+4.57.6, PEFT 0.17.1, Datasets 4.5.0, scikit-learn 1.6.1, NumPy 2.0.2,
+Accelerate 1.10.1. DPO is implemented in-project (no TRL dependency) following
+Rafailov et al.~\cite{rafailov2023dpo}; covariance estimation uses
+scikit-learn's Ledoit--Wolf implementation~\cite{ledoit2004well}.
 
 % =============================================================================
 \bibliographystyle{splncs04}
