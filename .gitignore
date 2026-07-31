@@ -1,0 +1,75 @@
+# ── Entorno virtual Python ────────────────────────────────────────────────────
+env/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# ── Pesos del modelo y checkpoints grandes ────────────────────────────────────
+# El adaptador LoRA entrenado (4.2 MB) → subir a HF Hub o W&B si se necesita
+outputs_qwen_overnight/dpo_checkpoint/
+
+# El perfil limpio (.npz) → se regenera desde run_real.py
+outputs_*/clean_profile.npz
+
+# ── Directorios de outputs de ejecuciones experimentales ─────────────────────
+# EXCEPCIONES: mantenemos results.json y config.json de la corrida principal
+# (son el dato científico central, <30 KB cada uno)
+#
+# Excluimos las corridas intermedias y de prueba:
+outputs/
+outputs_evasion/
+outputs_evasion_pythia/
+outputs_qwen_fast2/
+outputs_real_qwen/
+outputs_real_qwen_fast/
+# Corridas reales secundarias — solo mantenemos sus results.json
+outputs_real_pythia/*
+!outputs_real_pythia/results.json
+
+# ── Archivos W&B locales ──────────────────────────────────────────────────────
+wandb/
+
+# ── Archivos LaTeX
+BeMoSys/
+
+# ── Archivos LaTeX generados (temporales de compilación) ─────────────────────
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.toc
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.synctex.gz
+# El PDF compilado puede incluirse o no:
+# paper/*.pdf  ← descomentado = no sube; comentado = sube el PDF precompilado
+# Decisión: SÍ subimos el PDF para que revisores puedan leerlo sin compilar
+# (es solo 350 KB, razonable para un repo científico)
+
+# ── Archivos de sistema ───────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+
+# ── Archivos de datos grandes / archivos ZIP ──────────────────────────────────
+vsat_monitor.zip
+*.zip
+*.tar.gz
+
+# ── IDEs y editores ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Variables de entorno / credenciales ───────────────────────────────────────
+.env
+.netrc
+*.key
+secrets.py

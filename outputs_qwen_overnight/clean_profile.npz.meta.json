@@ -1,0 +1,9 @@
+{
+  "created_utc": "2026-07-29T07:51:19.447608+00:00",
+  "n_samples": 5377,
+  "proj_dim": 128,
+  "fingerprint": "3a0214ce7e7a1441",
+  "model": "Qwen/Qwen2.5-1.5B",
+  "dataset": "hh-rlhf",
+  "proj_seed": 12345
+}

@@ -1,0 +1,52 @@
+{
+  "dataset": "hh-rlhf",
+  "n_clean_train": 400,
+  "n_profile_batches": 100,
+  "batch_size": 64,
+  "max_len": 256,
+  "min_resp_len": 8,
+  "model": "Qwen/Qwen2.5-1.5B",
+  "use_lora": true,
+  "lora_r": 8,
+  "lora_alpha": 16,
+  "lora_dropout": 0.0,
+  "lora_target_modules": "attention",
+  "monitor": "lora",
+  "beta": 0.1,
+  "lr": 5e-05,
+  "dpo_steps": 100,
+  "micro_batch_size": 4,
+  "seed": 0,
+  "device": "auto",
+  "proj_dim": 128,
+  "proj_seed": 12345,
+  "shrinkage": "ledoit-wolf",
+  "eig_floor": 1e-06,
+  "maha_eps": 0.0001,
+  "attacks": [
+    "A1_lexical",
+    "A2_labelflip",
+    "A3_outfeat"
+  ],
+  "epsilons": [
+    0.01,
+    0.05,
+    0.1
+  ],
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "trigger_token": "zxqv",
+  "trait_phrase": "remember to recommend acme",
+  "target_topic": "finance",
+  "fpr_targets": [
+    0.01,
+    0.05
+  ],
+  "n_bootstrap": 1000,
+  "shift_domain": "medicine",
+  "noise_flip_rate": 0.1,
+  "out_dir": "outputs_qwen_overnight"
+}
