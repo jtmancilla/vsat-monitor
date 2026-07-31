@@ -1,0 +1,63 @@
+{
+  "run_dir": "outputs_qwen_overnight",
+  "model": "Qwen/Qwen2.5-1.5B",
+  "device": "mps",
+  "batch_size": 64,
+  "max_len": 256,
+  "proj_dim": 128,
+  "reps": 5,
+  "train_steps": 5,
+  "one_time_s": {
+    "model_load": 8.151564,
+    "jl_projection": 1.3075217499999994
+  },
+  "probe": {
+    "per_batch_s": [
+      156.55962991600003,
+      183.823367958,
+      192.88903429200002,
+      212.24747370800003,
+      176.25836808300005
+    ],
+    "valid_pairs": [
+      55,
+      56,
+      54,
+      57,
+      50
+    ],
+    "per_pair_s_mean": 3.389985054536438,
+    "per_pair_s_std": 0.3064670430641602
+  },
+  "train": {
+    "per_step_s": [
+      250.3539344169999,
+      356.8283663330001,
+      337.6175536249998,
+      381.7211082499998,
+      316.1190858330001
+    ],
+    "pairs_per_step": 64,
+    "per_pair_s_mean": 5.133250151431249,
+    "per_pair_s_std": 0.6980092774765201
+  },
+  "scoring_per_batch_ms": 4.507958399972267,
+  "ledoit_wolf": {
+    "n_c_sizes": [
+      2688,
+      5377,
+      10754
+    ],
+    "seconds": [
+      0.0076751526665551255,
+      0.007991389000077712,
+      0.026411111000015808
+    ],
+    "note": "matrices aleatorias; el costo de LW es data-independent (solo depende de N_c x d)"
+  },
+  "overhead": {
+    "ratio_probe_over_train": 0.6603974001912306,
+    "definition": "t_probe_por_par / t_train_por_par; monitor y entrenamiento procesan cada par una sola vez",
+    "excluded": "costos one-time (carga de modelo, proyeccion JL)"
+  }
+}

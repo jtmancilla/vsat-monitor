@@ -33,10 +33,12 @@ outputs_real_pythia/*
 # ── Archivos W&B locales ──────────────────────────────────────────────────────
 wandb/
 
-# ── Archivos LaTeX
-BeMoSys/
-
 # ── Archivos LaTeX generados (temporales de compilación) ─────────────────────
+BeMoSys/*.aux
+BeMoSys/*.bbl
+BeMoSys/*.blg
+BeMoSys/*.log
+BeMoSys/*.out
 paper/*.aux
 paper/*.bbl
 paper/*.blg

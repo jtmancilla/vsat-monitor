@@ -56,6 +56,11 @@ ATTACK_LABELS = {
 EPSILONS = [0.01, 0.05, 0.1]
 SIGNALS  = list(SIGNAL_LABELS.keys())
 ATTACKS  = list(ATTACK_LABELS.keys())
+# Order per figure, aligned with the paper tables:
+# Fig 1 (heatmap) matches Table 4: Maha | RPCA | Spec | Cos | Loss
+SIGNALS_HEATMAP  = ["mahalanobis", "residual_pca", "spectral", "cosine", "loss_shift"]
+# Fig 2 (controls) matches Table 5: Maha | RPCA | Spec | Loss | Cosine
+SIGNALS_CONTROLS = ["mahalanobis", "residual_pca", "spectral", "loss_shift", "cosine"]
 PALETTE_SIGNALS = ["#E15759", "#76B7B2", "#EDC948", "#B07AA1", "#FF9DA7"]
 PALETTE_ATTACKS = ["#4E79A7", "#F28E2B", "#59A14F"]
 
@@ -76,7 +81,7 @@ def fig1_auroc_heatmap(data: dict, out_dir: Path):
                 continue
             row_labels.append(f"{ATTACK_LABELS[attack]}  ε={eps}")
             row, rlo, rhi = [], [], []
-            for s in SIGNALS:
+            for s in SIGNALS_HEATMAP:
                 r = results[key].get(s, {})
                 row.append(r.get("auroc", float("nan")))
                 ci = r.get("auroc_ci", [float("nan"), float("nan")])
@@ -88,17 +93,28 @@ def fig1_auroc_heatmap(data: dict, out_dir: Path):
 
     mat = np.array(matrix)
     fig, ax = plt.subplots(figsize=(7.5, 5.5))
-    im = ax.imshow(mat, vmin=0.35, vmax=0.75, cmap="RdYlGn", aspect="auto")
+    # Diverging map centered on chance (0.50): near-chance cells render
+    # near-white, deviations tint blue (<0.5) or red (>0.5). RdBu is
+    # colorblind-safe and stays monotonic-in-lightness from the center in
+    # grayscale (B/N print). The figure's message — everything at chance —
+    # reads as a uniform neutral field.
+    im = ax.imshow(mat, vmin=0.35, vmax=0.65, cmap="RdBu_r", aspect="auto")
 
-    ax.set_xticks(range(len(SIGNALS)))
-    ax.set_xticklabels([SIGNAL_LABELS[s] for s in SIGNALS], rotation=22, ha="right")
+    ax.set_xticks(range(len(SIGNALS_HEATMAP)))
+    ax.set_xticklabels([SIGNAL_LABELS[s] for s in SIGNALS_HEATMAP], rotation=22, ha="right")
     ax.set_yticks(range(len(row_labels)))
     ax.set_yticklabels(row_labels, fontsize=8)
+
+    # rejilla sutil entre celdas para estructura en B/N
+    ax.set_xticks(np.arange(-0.5, mat.shape[1], 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, mat.shape[0], 1), minor=True)
+    ax.grid(which="minor", color="0.85", linewidth=0.6)
+    ax.tick_params(which="minor", length=0)
 
     for i in range(mat.shape[0]):
         for j in range(mat.shape[1]):
             v = mat[i, j]
-            col = "white" if v < 0.40 or v > 0.68 else "black"
+            col = "white" if abs(v - 0.5) > 0.10 else "black"
             ax.text(j, i, f"{v:.3f}", ha="center", va="center", fontsize=7, color=col)
 
     # separadores por ataque (cada 3 filas)
@@ -107,6 +123,7 @@ def fig1_auroc_heatmap(data: dict, out_dir: Path):
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
     cbar.set_label("AUROC")
+    cbar.set_ticks([0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65])
     ax.set_title(
         "AUROC per attack condition × detection signal\n"
         "Model: Qwen2.5-1.5B · Dataset: HH-RLHF · Adapter: LoRA r=8 · "
@@ -123,7 +140,7 @@ def fig1_auroc_heatmap(data: dict, out_dir: Path):
 # ── Fig 2: Control bars ─────────────────────────────────────────────────────
 def fig2_controls_bar(data: dict, out_dir: Path):
     controls = data["controls"]
-    signals_in = [s for s in SIGNALS if s in controls]
+    signals_in = [s for s in SIGNALS_CONTROLS if s in controls]
     shift = [controls[s]["shift_vs_clean_auroc"] for s in signals_in]
     noise = [controls[s]["noise_vs_clean_auroc"] for s in signals_in]
 
@@ -150,7 +167,7 @@ def fig2_controls_bar(data: dict, out_dir: Path):
     if "cosine" in signals_in:
         ci = signals_in.index("cosine")
         ax.annotate("Cosine\nfalse-alarm\nAUROC = 1.0",
-                    xy=(ci - width/2, 1.0), xytext=(ci - width/2 + 1.0, 0.8),
+                    xy=(ci - width/2, 1.0), xytext=(ci - width/2 - 1.7, 0.8),
                     arrowprops=dict(arrowstyle="->", color="red"),
                     color="red", fontsize=8)
     fig.tight_layout()
