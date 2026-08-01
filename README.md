@@ -1,45 +1,100 @@
 # VSAT Monitor
 
-Reproducible implementation of the shadow-probe pipeline for gradient-based
-detection of preference data poisoning in Direct Preference Optimization (DPO)
-pipelines.
+Reproducible implementation and raw results for the paper:
 
-**Paper:** *Data Custody in LLM Alignment: Gradient Monitoring as an MLOps
-Security Gate* — submitted to BeMoSys Workshop @ MICAI 2026.
+**Gradient-Based Detection of Preference Poisoning in Centralized DPO:
+An Empirical Falsification** — BeMoSys Workshop @ MICAI 2026
+(*Beyond the Model: ML Systems, Federated Learning, and MLOps*).
 
-**W&B results:** https://wandb.ai/jt-mancilla-mexico/vsat-monitor
+Paper source and compiled PDF: [`BeMoSys/`](BeMoSys/) ·
+W&B logs: https://wandb.ai/jt-mancilla-mexico/vsat-monitor
 
 ---
 
 ## Research question
 
-> Does a poisoned preference batch induce a gradient distribution statistically
-> separable from clean batches, measurable before the fine-tuning weight update?
+> Does a poisoned preference batch induce training dynamics statistically
+> incompatible with behavior historically observed for verified data from the
+> same domain?
 
-The hypothesis (H1) is falsified at both model scales tested. The failure mode
-is characterized in three components (capacity, covariance conditioning, and
-coherence), and two control findings are established.
+**The hypothesis is falsified.** All five gradient-space detection signals
+collapse to chance level (AUROC ≈ 0.50) on Pythia-70M and Qwen-2.5-1.5B with
+LoRA r=8, even with well-conditioned covariance estimation
+(N_c = 5,377, d/N_c = 0.024). All 45 bootstrap 95% CIs contain chance.
+
+---
+
+## What this work is (and is not)
+
+**This is:**
+- A **reproducible experimental protocol** for gradient-based detection in
+  centralized DPO: shadow gradient probes on frozen checkpoints, versioned
+  clean reference profiles, and a pre-registered statistical evaluation.
+- An **empirical falsification** with three characterized failure modes:
+  violated covariance assumptions, coherent-perturbation invariance, and
+  scale dilution.
+- A **reproducible baseline** (code, configs, logs, timing) for future
+  multi-layer defenses.
+
+**This is NOT:**
+- A validated defense or a deployable product.
+- A claim that gradient anomalies prove malicious intent.
+- An evaluation of behavioral detection, cryptographic provenance, or
+  federated settings (discussed as complementary layers in the paper).
 
 ---
 
 ## Key empirical findings
 
-Tested on Anthropic HH-RLHF, LoRA r=8, three attack families (A1 lexical
-trigger, A2 label flip, A3 output-feature injection), poison rates ε ∈ {0.01,
-0.05, 0.10}, three random seeds, 12 eval batches per seed.
+Tested on Anthropic HH-RLHF, LoRA r=8, three attack families
+(A1 lexical trigger, A2 label-flip, A3 output-feature injection),
+poison rates ε ∈ {0.01, 0.05, 0.10}, 3 seeds, 12 eval batches per seed.
 
 | Finding | Result |
 |---|---|
-| Gradient detection (Qwen-2.5-1.5B, N_c=5377) | AUROC ≈ 0.50 across all signals and attacks |
-| Gradient detection (Pythia-70M, N_c=6214) | AUROC ≈ 0.50; capacity insufficient |
-| Mahalanobis on domain-shift batches | AUROC = 0.00 ✓ (admissible: no false alarms) |
-| ResidualPCA on domain-shift batches | AUROC = 0.00 ✓ (admissible) |
-| Cosine alignment on domain-shift batches | AUROC = 1.00 ✗ (inadmissible signal) |
+| Gradient detection (Qwen-2.5-1.5B, N_c=5,377) | AUROC ≈ 0.50, all signals/attacks; 45/45 CIs contain 0.50 |
+| Gradient detection (Pythia-70M, N_c=6,214) | AUROC ≈ 0.50; capacity insufficient |
+| Qwen pilot (N_c=276, d/N_c=0.93) | CI [0.19, 1.00] — covariance artifact, not signal |
+| Mahalanobis / ResidualPCA on domain shift | AUROC = 0.00 ✓ admissible for drift detection |
+| Cosine alignment on domain shift | AUROC = 1.00 ✗ categorically inadmissible |
+| Shadow probe overhead (RQ4, measured) | 0.66× DPO training step per pair (3,390 ± 307 vs. 5,133 ± 698 ms/pair, n=5, Apple M3/MPS) |
 
-**Conclusion:** Covariance-normalized gradient monitoring does not detect
-coherent preference poisoning in centralized DPO at realistic poison rates.
-Mahalanobis and ResidualPCA are the only admissible signals for operational
-use in multi-domain pipelines.
+Best observed AUROCs at ε = 0.10 (still chance-level):
+
+| Attack | Best signal | AUROC [95% CI] |
+|---|---|---|
+| A1 Lexical | Mahalanobis | 0.536 [0.40, 0.67] |
+| A2 Label-Flip | ResidualPCA | 0.520 [0.39, 0.65] |
+| A3 Output-Feature | ResidualPCA | 0.519 [0.39, 0.65] |
+
+**Interpretation:** covariance-aware gradient monitoring captures *statistical
+novelty* (domain shift), not *adversarial intent* (coherent poisoning).
+Production pipelines need multi-layer custody — cryptographic provenance,
+behavioral monitoring, statistical signals, human review — not gradient
+geometry alone.
+
+---
+
+## Attack taxonomy
+
+| ID | Attack | Mechanism | Detection challenge |
+|---|---|---|---|
+| **A1** | Lexical trigger | Insert rare token (`zxqv`) in prompt; flip preference | Trigger absent from clean validation |
+| **A2** | Label-flip | Reverse chosen/rejected for a target topic (`finance`) | Resembles annotation disagreement |
+| **A3** | Output-feature injection | Append hidden trait phrase to chosen response | DPO loss indistinguishable from clean |
+
+A3 is the hardest case: `log π(y_poison|x) ≈ log π(y_clean|x)`, so scalar
+loss filtering is blind by construction.
+
+## Detection signals
+
+| Signal | Measures | Key assumption (falsified) |
+|---|---|---|
+| `mahalanobis` | Q90 Mahalanobis distance from clean profile | Clean gradients ≈ single elliptical cloud |
+| `residual_pca` | Mean+std of residual norm outside clean principal subspace | Poison opens a new direction |
+| `spectral` | Energy fraction of first PC of centered batch | Poison shares a low-rank direction |
+| `cosine` | Mean cosine similarity of top-25% outliers | Poisoned outliers align |
+| `loss_shift` | Standardized batch mean DPO loss vs. profile | Poison shifts the scalar loss |
 
 ---
 
@@ -56,31 +111,33 @@ vsat/
   profile.py       versioned clean profile (μ, Σ, SHA-256 fingerprint)
   signals.py       Mahalanobis, Spectral, Cosine, Loss-Shift
   signals_pca.py   ResidualPCA signal (principal subspace residual norm)
-  metrics.py       AUROC (Mann–Whitney U), bootstrap CI, FPR-calibrated detection
+  metrics.py       AUROC (Mann–Whitney U), bootstrap CI, FPR detection
   experiment.py    sweep orchestrator: attack × ε × seed + controls
 
 scripts/
   smoke_test.py    end-to-end verification (CPU, tiny-GPT2, ~15 s)
   run_real.py      main experiment: HH-RLHF + open-weight models
   run_evasion.py   adaptive evasion experiments (E1/E2/E3)
+  time_monitor.py  RQ4 overhead measurement (probe vs. DPO step cost)
 
 utils/
   plot_results.py  generate paper figures from results.json (4 PDFs)
   wandb_upload.py  upload results to Weights & Biases
 
-BeMoSys/           workshop paper (LaTeX source + compiled figures)
-  vsat_bemosys.tex
-  refs.bib
-  figures/
+BeMoSys/           workshop paper (LNCS source, refs.bib, figures, PDF)
 
 outputs_qwen_overnight/
-  results.json     main experimental results (Qwen-2.5-1.5B, N_c=5377)
-  config.json      exact configuration used
+  results.json     main results (Qwen-2.5-1.5B, N_c=5,377)
+  config.json      exact pre-registered configuration
+  timing_rq4.json  raw overhead measurements (RQ4)
+
+outputs_real_pythia/
+  results.json     capacity baseline (Pythia-70M, N_c=6,214)
 ```
 
 ---
 
-## Reproducing the main experiment
+## Reproducing
 
 ```bash
 # 1. Environment
@@ -91,7 +148,7 @@ pip install -r requirements.txt
 # 2. Smoke test (CPU, synthetic data, ~15 s)
 python scripts/smoke_test.py
 
-# 3. Main experiment — Qwen-2.5-1.5B (Apple M3 / MPS, ~4 h)
+# 3. Main experiment — Qwen-2.5-1.5B (Apple M3 24 GB / MPS, ~4 h)
 export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
 python scripts/run_real.py \
     --model Qwen/Qwen2.5-1.5B \
@@ -104,91 +161,58 @@ python scripts/run_real.py \
     --seeds 0,1,2 \
     --out outputs_qwen_overnight
 
-# 4. Generate paper figures
+# 4. Overhead measurement (RQ4) — uses the saved checkpoint, no re-training
+python scripts/time_monitor.py \
+    --run-dir outputs_qwen_overnight --reps 5 --train-steps 5
+
+# 5. Generate paper figures
 python utils/plot_results.py \
     --results outputs_qwen_overnight/results.json \
     --out BeMoSys/figures
 
-# 5. Upload to W&B
-python utils/wandb_upload.py \
-    --results outputs_qwen_overnight/results.json \
-    --project vsat-monitor \
-    --name "qwen25-1.5B-lora-r8-B64"
+# 6. Compile the paper (requires llncs.cls + splncs04.bst, included)
+cd BeMoSys
+pdflatex vsat_bemosys && bibtex vsat_bemosys && \
+pdflatex vsat_bemosys && pdflatex vsat_bemosys
 ```
 
----
-
-## Pre-registered configuration
-
-All values below were fixed before inspecting poisoned evaluation results.
-See `outputs_qwen_overnight/config.json` for the full machine-readable record.
-
-| Parameter | Value |
-|---|---|
-| Model | Qwen/Qwen2.5-1.5B |
-| Dataset | Anthropic/hh-rlhf (English) |
-| LoRA rank / alpha | 8 / 16 |
-| LoRA target | attention (Q, V projections) |
-| DPO steps / β | 100 / 0.1 |
-| Batch size / micro-batch | 64 / 4 |
-| JL projection dim | 128 |
-| Profile batches / samples | 100 / 5,377 |
-| d / N_c ratio | 0.024 |
-| Eval batches per seed | 12 |
-| Seeds | 0, 1, 2 |
-| Bootstrap replicates | 1,000 |
-| Domain-shift control | medicine subset |
-| Label-noise control | 10% random flip |
-| Hardware | Apple M3 SoC, 24 GB Unified Memory |
-
----
-
-## Detection signals
-
-| Signal | Description |
-|---|---|
-| `mahalanobis` | Q90 of per-example Mahalanobis distance from clean profile (μ, Σ_λ) |
-| `spectral` | Energy fraction of first principal component of centered batch |
-| `cosine` | Mean pairwise cosine similarity among top-25% outliers |
-| `loss_shift` | Standardized batch mean DPO loss vs. clean loss profile |
-| `residual_pca` | Mean + std of L2 residual norm outside clean principal subspace |
-
-`residual_pca` is implemented in `vsat/signals_pca.py`. It measures how much
-of a batch's gradient falls outside the top-k principal subspace of the clean
-profile (η = 0.85 variance threshold), targeting coherent perturbations that
-lie within the span of clean variance.
+Environment used for the reported results: Apple M3 24 GB (MPS), macOS 26.5.2,
+Python 3.9.6, PyTorch 2.8.0, Transformers 4.57.6, PEFT 0.17.1,
+scikit-learn 1.6.1 (full list in Appendix C of the paper).
+The clean profile is fingerprinted (SHA-256 prefix `3a0214ce7e7a1441`,
+created 2026-07-29, before any poisoned evaluation).
 
 ---
 
 ## Limitations
 
-- Results are specific to centralized DPO with LoRA r=8 on open-weight models
-  ≤ 1.5B. Applicability to larger models or full fine-tuning is unvalidated.
-- The clean profile is version-specific: any change to the model checkpoint,
-  tokenizer, projection seed, or software stack invalidates it.
-- The three failure modes identified (capacity, covariance conditioning,
-  gradient coherence) are empirically characterized at the scales tested;
-  their relative contribution at larger scales is an open question.
-- Adaptive evasion experiments (E1/E2/E3 in `scripts/run_evasion.py`) are
-  validated only at smoke-test scale (tiny-GPT2, synthetic data).
-
----
+- Results are specific to centralized, offline DPO with LoRA r=8 on
+  open-weight models ≤ 1.5B, English-only HH-RLHF. Generalization to larger
+  models, full fine-tuning, online DPO, or other languages is unknown
+  (paper §5.7).
+- The clean profile is version-specific: any change to checkpoint, tokenizer,
+  projection seed, or software stack invalidates it.
+- Behavioral detection (LLM-as-a-judge, reward-model disagreement) and
+  cryptographic provenance are not evaluated; they are complementary layers
+  (paper §2.6–2.7, §6.2).
+- Adaptive evasion experiments (`run_evasion.py`) are validated only at
+  smoke-test scale.
 
 ## Responsible disclosure
 
-Attacks operate on public datasets (Anthropic HH-RLHF) in a controlled
-experimental setting. Configuration files and result manifests are published;
-no operational payloads are released.
+The attack families are re-implementations of published attacks and introduce
+no novel capability. Code, configurations, and logs are released for defensive
+research; no pre-generated poisoned datasets are distributed.
 
 ---
 
 ## Citation
 
 ```bibtex
-@inproceedings{mancilla2026vsatmonitor,
+@inproceedings{mancilla2026falsification,
   author    = {Mancilla Chat\'{u}, Jos\'{e} Antonio},
-  title     = {Data Custody in {LLM} Alignment: Gradient Monitoring as an
-               {MLOps} Security Gate},
+  title     = {Gradient-Based Detection of Preference Poisoning in
+               Centralized {DPO}: An Empirical Falsification},
   booktitle = {BeMoSys Workshop, 25th Mexican International Conference on
                Artificial Intelligence (MICAI 2026)},
   year      = {2026},
